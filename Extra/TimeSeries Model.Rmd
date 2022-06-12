@@ -1,0 +1,154 @@
+---
+title: "Time series"
+author: "VDOT team 2"
+date: "2022/5/4"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+rm(list = ls())
+set.seed(4)
+library(xgboost)
+library(caret)
+library(ggplot2)
+library(lubridate)
+library(forecast)
+```
+
+```{r}
+# loading the dataset
+data = read.csv("Cleaned.csv", stringsAsFactors = TRUE)
+x <- data$TOTAL
+data$Date <- as.Date(data$Date)
+# data_year <- NULL
+# for (i in (1:9)) {
+#   data_year[i] <- data[data$Year == i+2013, ]
+# }
+
+# seplit dataset by year
+data_2014 <- data[data$Year == 2014, ]
+x_2014 <- data_2014$TOTAL
+data_2014$Date <- as.Date(data_2014$Date)
+
+data_2015 <- data[data$Year == 2015, ]
+x_2015 <- data_2015$TOTAL
+data_2015$Date <- as.Date(data_2015$Date)
+
+data_2016 <- data[data$Year == 2016, ]
+x_2016 <- data_2016$TOTAL
+data_2016$Date <- as.Date(data_2016$Date)
+
+data_2017 <- data[data$Year == 2017, ]
+x_2017 <- data_2017$TOTAL
+data_2017$Date <- as.Date(data_2017$Date)
+
+data_2018 <- data[data$Year == 2018, ]
+x_2018 <- data_2018$TOTAL
+data_2018$Date <- as.Date(data_2018$Date)
+
+data_2019 <- data[data$Year == 2019, ]
+x_2019 <- data_2019$TOTAL
+data_2019$Date <- as.Date(data_2019$Date)
+
+data_2020 <- data[data$Year == 2020, ]
+x_2020 <- data_2020$TOTAL
+data_2020$Date <- as.Date(data_2020$Date)
+
+data_2021 <- data[data$Year == 2021, ]
+x_2021 <- data_2021$TOTAL
+data_2021$Date <- as.Date(data_2021$Date)
+
+data_2022 <- data[data$Year == 2022, ]
+x_2022 <- data_2022$TOTAL
+data_2022$Date <- as.Date(data_2022$Date)
+```
+
+
+```{r}
+data_2019_week <- data_2019 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2020_week <- data_2020 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_covid_week <- rbind(data_2019_week, data_2020_week)
+
+x_covid_week <- data_covid_week$total
+#data_covid$Date <- as.Date(data_covid$Date)
+
+mts <- ts(x_covid_week, start = decimal_date(ymd("2019-01-01")),
+                            frequency = 53)
+fit <- auto.arima(mts, D = 1)
+forecast(fit, 53)
+plot(forecast(fit, 53), xlab ="Weekly Data",
+     ylab ="Total Count")
+
+```
+
+```{r}
+# merge yearly dataset & group by week number
+data_2014_week <- data_2014 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2015_week <- data_2015 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2016_week <- data_2016 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2017_week <- data_2017 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2018_week <- data_2018 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2019_week <- data_2019 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2020_week <- data_2020 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2021_week <- data_2021 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+data_2022_week <- data_2022 %>% 
+  group_by(Week.Number) %>%
+  summarise(total = sum(TOTAL))
+
+# rbind weekly dataset
+data_week <- rbind(data_2014_week, data_2015_week, data_2016_week, 
+                   data_2017_week, data_2018_week, data_2019_week,
+                   data_2020_week, data_2021_week, data_2022_week)
+
+# extract target variable
+x_week <- data_week$total
+
+# build time series model
+mts <- ts(x_week, start = decimal_date(ymd("2014-02-01")),
+                            frequency = 53)
+
+# fit the model (D = 1) governs seasonal differencing
+fit <- auto.arima(mts, D = 1)
+forecast(fit, h = 53)
+plot(forecast(fit, h = 53), xlab ="Weekly Data",
+     ylab ="Total Count",
+     main ="Total Count Time Series", col.main ="darkgreen")
+```
+
+
+```{r}
+#Issue that we removed some dates earlier with NA values??
+#Multivariate Time Series
+```
+

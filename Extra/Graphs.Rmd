@@ -1,0 +1,112 @@
+---
+title: "Graphs"
+output: html_document
+date: '2022-05-09'
+---
+
+```{r}
+#Read in Data
+data <- read.csv('HistoricalData.csv', header = TRUE, stringsAsFactors = TRUE)
+
+```
+
+
+#Number of Passengers by Hour
+```{r}
+ggplot(data=data, aes(x = Hour, y = TOTAL)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Hour') +
+  xlab('Weekdays') + ylab('Count') +
+  theme_minimal()
+```
+
+
+#Number of Passengers by Holiday
+```{r}
+#We might have lost a few holidays from incomplete data
+holiday <- data[data$Holiday != "No Holiday",]
+
+ggplot(holiday, aes(x=Holiday, y=TOTAL)) + 
+  geom_bar(stat="identity")  + 
+   coord_flip()
+
+```
+
+#Number of Passengers by School Event
+```{r}
+school <- data[data$SchoolEvent != "No School Event",]
+
+ggplot(school, aes(x=SchoolEvent, y=TOTAL)) + 
+  geom_bar(stat="identity")  + 
+   coord_flip()
+```
+
+#Number of Passengers by Weekday
+```{r}
+ggplot(data=data, aes(x = WeekDay, y = TOTAL)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Weekday') +
+  xlab('Weekdays') + ylab('Count') +
+  theme_minimal()
+
+```
+
+#Number of Passengers by Month
+```{r}
+ggplot(data=data, aes(x = Month, y = TOTAL)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Month') +
+  xlab('Weekdays') + ylab('Count') +
+  theme_minimal()
+
+```
+
+
+#Features of Top Values
+```{r}
+#Aggregate Data by Hour
+data <- data %>% 
+  group_by(Date) %>% 
+  summarise(Hour = NULL,
+            TOTAL = sum(TOTAL),
+            TRAILER = sum(TRAILER),
+            BUS = sum(BUS),
+            TRUCK = sum(TRUCK),
+            PED.BYC = sum(PED.BYC),
+            LOD = sum(LOD),
+            Month = first(Month),
+            Day = first(Day),
+            Year = first(Year),
+            Week.Number = first(Week.Number),
+            Day.of.Week = first(Day.of.Week),
+            WeekDay = first(WeekDay),
+            CountWeekDay = first(CountWeekDay),
+            Holiday = first(Holiday),
+            temp = first(temp),
+            precip = first(precip),
+            snow = first(snow),
+            windspeed = first(windspeed),
+            SchoolEvent = first(SchoolEvent),
+            Rush = first(Rush),
+            covid = first(covid))
+
+#Top Values- Top 100 TOTAL
+top <- data[data$TOTAL >= 3050 ,]
+
+#Count of Holidays
+ggplot(top, aes(Holiday)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Count of School Events
+ggplot(top, aes(SchoolEvent)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Count of WeekDay
+ggplot(top, aes(WeekDay)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Count of Month
+ggplot(top, aes(Month)) +
+  geom_bar(fill = "#0073C2FF")
+```
+

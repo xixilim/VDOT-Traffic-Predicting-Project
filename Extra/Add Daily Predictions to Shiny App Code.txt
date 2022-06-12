@@ -1,0 +1,35 @@
+ #Inside UI
+
+,
+           tableOutput("DailyValue")
+
+#Inside Server
+
+ ################################# Make Daily Predictions #################################
+  load("DayModel.rda")    # Load saved model
+  
+  #Aggregate Data by Hour
+  newdataday <- newdata %>% 
+    group_by(Date) %>% 
+    summarise(Month = first(Month),
+              Day = first(Day),
+              Year = first(Year),
+              Week.Number = first(Week.Number),
+              Day.of.Week = first(Day.of.Week),
+              WeekDay = first(WeekDay),
+              Holiday = first(Holiday),
+              temp = first(temp),
+              precip = first(precip),
+              snow = first(snow),
+              windspeed = first(windspeed),
+              covid = first(covid))
+  
+  predictionsday <- subset(newdataday, select=c(Date))
+  newdataday <- subset(newdataday, select=-c(Date))
+  newdataday <- data.matrix(newdataday, rownames.force = NA)
+  
+  predictionsday["TOTAL_Day_Predict"] <- predict(model, newdata = newdataday)
+  predictionsday$Date <- as.Date(as.POSIXct(predictionsday$Date, origin="1970-01-01"))
+  
+  #Output  
+  output$DailyValue <- renderTable({predictionsday})

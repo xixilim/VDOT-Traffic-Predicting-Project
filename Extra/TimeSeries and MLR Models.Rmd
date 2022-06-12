@@ -1,0 +1,154 @@
+---
+title: "Models"
+output: html_document
+date: '2022-05-04'
+---
+
+```{r}
+data <- read.csv("Cleaned.csv")
+```
+
+Target Variable: TOTAL
+Model: Supervised, Regression
+
+Granularity By Hour
+
+XGBoost
+GLM, Random Forest, Linear Regression, Gradient Boosting
+Time Series
+
+Correlation Plots
+Visualize Target Variable
+Assumptions?
+Resampling methods or subset selection?
+
+```{r}
+#Create DateTime Column
+library(hms)
+data$Hour <- as.numeric(data$Hour)
+data$Hour = paste0(data$Hour, ":00:00")
+data$Hour = as_hms(data$Hour)
+data$DateTime <- paste(data$Date, data$Hour)
+#summary(as.factor(data$Hour))
+
+
+data$DateTime <- as.POSIXct(data$DateTime, format="%Y-%m-%d %H:%M:%S", tz = "EST") 
+
+```
+
+#Time Series
+```{r}
+library(dplyr)
+library(ggplot2)
+
+#Plot by Day
+timeseriesDay <- subset(data, select=c(Date,TOTAL))
+timeseriesDay$Date = as.Date(timeseriesDay$Date)
+
+timeseriesDay <- timeseriesDay %>% 
+  group_by(Date) %>% 
+  summarise(TOTAL = sum(TOTAL))
+
+plot(timeseriesDay, type = "l")
+
+#Trends
+
+tsdata <- ts(timeseriesDay, frequency = 12) 
+ddata <- decompose(tsdata, "multiplicative")
+plot(ddata)
+
+tsdata <- ts(timeseriesDay, frequency = 52) 
+ddata <- decompose(tsdata, "multiplicative")
+plot(ddata)
+
+tsdata <- ts(timeseriesDay, frequency = 365) 
+ddata <- decompose(tsdata, "multiplicative")
+plot(ddata)
+
+
+
+
+library(forecast)
+rownames(timeseriesDay) <- timeseriesDay$Date
+timeseriesDay <- subset(data, select=c(TOTAL))
+mymodel <- auto.arima(timeseriesDay)
+mymodel
+
+myforecast <- forecast(mymodel, level=c(95), h=365*24)
+plot(myforecast)
+
+#Plot by Hour
+timeseriesHour <- subset(data, select=c(DateTime,TOTAL, Hour))
+
+ggplot(timeseriesHour, aes(x=Hour, y=TOTAL)) +
+  geom_line() + 
+  xlab("")
+
+```
+
+
+
+
+
+#Multiple Linear Regression
+```{r}
+#Correlation Plot
+library(psych)
+predict <- subset(data, select=-c(DateTime,Date,Year,WeekDay,TRAILER,BUS,TRUCK,PED.BYC,LOD,Holiday,SchoolEvent))
+corPlot(predict, cex = 1.2)
+
+#Convert Datatype
+data$Hour <- as.character(data$Hour)
+
+data$Month <- as.character(data$Month)
+data$Day <- as.character(data$Day)
+data$Week.Number <- as.character(data$Week.Number)
+data$Day.of.Week <- as.character(data$Day.of.Week)
+data$CountWeekDay <- as.character(data$CountWeekDay)
+
+data$Holiday <- as.factor(data$Holiday)
+data$SchoolEvent <- as.factor(data$SchoolEvent)
+data$Rush <- as.factor(data$Rush)
+
+#MLR
+predict <- subset(data, select=-c(DateTime,Date,Year,TRAILER,BUS,TRUCK,PED.BYC,LOD))
+
+lmpred <- lm(TOTAL~.-snow-windspeed-Day.of.Week-CountWeekDay-Rush, data=predict)
+summary(lmpred)
+
+#Correlation- Multicollinearity
+numeric <- select_if(predict, is.numeric) 
+corPlot(numeric, cex = 1.2)
+
+#Rush is highly correlated with Hour
+#Day,of.Week is perfectly correlated with WeekDay
+#CountWeekDay is correlated with ??
+
+car::vif(lmpred)
+
+#Homoskedasticity
+lmtest::bptest(lmpred)
+#p-val < 0.05 so not homoskedastic so it does not meet the assumption of homoskedasticity
+
+#Lineraity- maybe not, deviates a lot from the line in the Normal Q-Q plot
+#Standardized residuals go past -3 and 3, weird clump
+#A few outliers but can't take out and don't effect things too much
+plot(lmpred)
+
+## Normality
+hist(predict$TOTAL) #right skewed
+hist(log(predict$TOTAL)) #taking the log makes it better
+hist(lmpred$residuals) #residuals look normal, very centered around 0
+
+#Log Model- can't take log because we have 0s in dataset so taking square root instead
+lmpredSqrt <- lm(sqrt(TOTAL)~.-snow-windspeed-Day.of.Week-CountWeekDay-Rush, data=predict)
+summary(lmpredSqrt)
+
+#This increased R-squared by .5, interpretability might be weird tho
+
+lmtest::bptest(lmpredSqrt) #still doesn't meet homoskedasticity assumption
+plot(lmpredSqrt)
+
+```
+
+

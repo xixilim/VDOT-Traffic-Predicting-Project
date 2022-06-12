@@ -1,0 +1,179 @@
+---
+title: "New"
+output: html_document
+date: '2022-05-04'
+---
+
+Libraries
+```{r}
+library(tidyverse)
+library(hms)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+```
+
+Read in Data
+```{r}
+mergeddata = read.csv("MergedData.csv") #all of the data merged
+```
+
+Remove Rows that Don't Make Sense
+```{r}
+mergeddata$TOTAL[c(100502)]<-0   #Contact VITA
+mergeddata$TRAILER[c(47199)]<-9  #Came 
+mergeddata$LOD[c(138177)] <- 0   #LOD = 0.270833333
+```
+
+```{r}
+#remove empty cell (52 missing values)
+mergeddata= mergeddata[!(mergeddata$Date==""),]
+
+#fill empty Trailer value into 0 
+#unique(mergeddata$TRAILER) #check ''/' '
+mergeddata$TRAILER[(mergeddata$TRAILER==''|mergeddata$TRAILER==' ')]<-'0'
+
+#Convert datatype
+mergeddata$TOTAL<- as.numeric(mergeddata$TOTAL)
+mergeddata$TRAILER<- as.numeric(mergeddata$TRAILER)
+mergeddata$Year<- as.factor(mergeddata$Year)
+mergeddata$Holiday.Name <- as.character(mergeddata$Holiday.Name)
+```
+
+Encode Holidays and Events as 0/1 for if occurred or not
+```{r}
+mergeddata$Holiday.Name[(mergeddata$Holiday.Name=='')]<- "No Holiday"
+mergeddata$Holiday.Observed[(mergeddata$Holiday.Observed=='')]<- "No School Event"
+
+#mergeddata <- mergeddata %>% 
+  #mutate(Holiday.Name = ifelse(is.na(Holiday.Name),0,1)) %>% 
+  #mutate(Holiday.Observed = ifelse(is.na(Holiday.Observed),0,1))
+```
+
+Dummy code Holidays and Events
+```{r}
+
+```
+
+Encode Snow
+```{r}
+#Change NA value dates that snowed into 1 and other 0. Then turn dates with snow in to 1 
+#and others into 0 
+mergeddata$snow = case_when(mergeddata$Date == 	
+"2014-01-15" ~ 1, mergeddata$Date == "2014-02-01" ~ 1, mergeddata$Date == "2014-02-01" ~   1, mergeddata$Date == "2014-02-04" ~ 1, 
+mergeddata$Date == "2014-02-05" ~ 1, mergeddata$Date == "2014-02-09" ~ 1, 
+mergeddata$Date == "2014-02-18" ~ 1, mergeddata$Date == "2014-03-02" ~ 1, 
+mergeddata$Date == "2014-03-12" ~ 1, mergeddata$Date == "2014-03-20" ~ 1, 
+mergeddata$Date == "2014-03-30" ~ 1, mergeddata$Date == "2014-04-15" ~ 1,
+mergeddata$Date == "2015-02-16" ~ 1, mergeddata$Date == "2015-02-17" ~ 1,
+mergeddata$Date == "2015-02-18" ~ 1, mergeddata$Date == "2015-02-21" ~ 1,
+mergeddata$Date == "2015-02-24" ~ 1, mergeddata$Date == "2015-03-01" ~ 1,
+mergeddata$Date == "2016-01-22" ~ 1, mergeddata$Date == "2014-01-23" ~ 1,
+mergeddata$Date == "2016-02-15" ~ 1, mergeddata$snow >0 ~ 1, mergeddata$snow == 0 ~ 0)
+
+mergeddata$snow[is.na(mergeddata$snow)]=0
+```
+
+```{r}
+#Take out white spaces
+mergeddata$DAILY = gsub(" ", "", mergeddata$DAILY, fixed = TRUE)
+
+#1766 rows without any times
+summary(as.factor(mergeddata$DAILY))
+
+#add 0s where necessary (00:00:00 = 0:00:00, 00:30:00 = 0:30:00)
+mergeddata[mergeddata$DAILY == '0:00:00',]$DAILY = paste0("0", mergeddata[mergeddata$DAILY == '0:00:00',]$DAILY)
+mergeddata[mergeddata$DAILY == '0:30:00',]$DAILY = paste0("0", mergeddata[mergeddata$DAILY == '0:30:00',]$DAILY)
+
+#Change to Timestamp
+mergeddata$DAILY = strptime(mergeddata$DAILY, format = "%H:%M:%OS", tz = "EST")
+mergeddata$DAILY = as_hms(mergeddata$DAILY)
+
+#Create new column for each hour number
+mergeddata$Hour <- hour(mergeddata$DAILY)
+
+#Aggregate Data by Hour
+mergeddata <- mergeddata %>% 
+  group_by(Hour,Date) %>% 
+  summarise(TOTAL = sum(TOTAL),
+            TRAILER = sum(TRAILER),
+            BUS = sum(BUS),
+            TRUCK = sum(TRUCK),
+            PED.BYC = sum(PED.BYC),
+            LOD = sum(LOD),
+            Month = first(Month),
+            Day = first(Day),
+            Year = first(Year),
+            Week.Number = first(Week.Number),
+            Day.of.Week = first(Day.of.Week),
+            Day.1 = first(Day.1),
+            Count = first(Count),
+            Holiday.Name = first(Holiday.Name),
+            temp = first(temp),
+            precip = first(precip),
+            snow = first(snow),
+            windspeed = first(windspeed),
+            Holiday.Observed = first(Holiday.Observed))
+
+#Crete AM/PM Rush Feature
+mergeddata <- mergeddata %>%
+  mutate(Rush = ifelse((Hour >= 5 & Hour <=8)|(Hour >= 15 & Hour <= 20), 1, 0))
+
+```
+
+```{r}
+#Convert Date to Datetime
+mergeddata$Date = as.POSIXct(mergeddata$Date,format="%Y-%m-%d")
+```
+
+```{r}
+na.count <- function(v){sum(is.na(v))}
+apply(mergeddata, 2, na.count)
+
+#Remove rows where TOTAL = NA
+mergeddata <- mergeddata %>%
+  drop_na(TOTAL)
+#Convert values to 0 where NA for other columns
+mergeddata$BUS[is.na(mergeddata$BUS)]=0
+mergeddata$TRUCK[is.na(mergeddata$TRUCK)]=0
+mergeddata$PED.BYC[is.na(mergeddata$PED.BYC)]=0
+mergeddata$LOD[is.na(mergeddata$LOD)]=0
+
+#TOTAL          TRAILER              BUS            TRUCK          PED.BYC              LOD 
+# 112                0              161              152               82              207
+```
+
+```{r}
+#Change Column names
+mergeddata <- mergeddata %>%
+  rename(
+    Holiday = Holiday.Name,
+    SchoolEvent = Holiday.Observed,
+    WeekDay = Day.1,
+    CountWeekDay = Count)
+
+```
+
+Create Covid Column
+```{r}
+#March 15, 2020- shut down
+#March 30, 2020- Stay at Home order
+
+mergeddata$Date <- as.Date(mergeddata$Date)
+
+mergeddata$covid <- ifelse(mergeddata$Date < "2020-03-30" | mergeddata$Date > "2020-12-31",0,1)
+
+```
+
+
+Change holidays that were incorrect
+```{r}
+
+```
+
+
+Export Cleaned Data
+```{r}
+write.csv(mergeddata, "Cleaned.csv", row.names = FALSE)
+```
+

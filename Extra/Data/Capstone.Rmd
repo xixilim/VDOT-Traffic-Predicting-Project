@@ -1,0 +1,368 @@
+---
+title: "Capstone"
+output: html_notebook
+---
+
+Libraries
+```{r}
+library(tidyverse)
+library(hms)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+```
+
+Read in Data
+```{r}
+mergeddata = read.csv("MergedData.csv") #all of the data merged
+extradata = read.csv("ExtraData.csv") #just extra data
+alldata = read.csv("AllData.csv") #just vdot data
+```
+
+Remove Rows that Don't Make Sense
+```{r}
+mergeddata$TOTAL[c(100502)]<-0   #Contact VITA
+mergeddata$TRAILER[c(47199)]<-9  #Came 
+```
+
+VDOT Distributions
+```{r}
+#remove empty cell (52 missing values)
+mergeddata= mergeddata[!(mergeddata$Date==""),]
+
+#fill empty Trailer value into 0 
+#unique(mergeddata$TRAILER) #check ''/' '
+mergeddata$TRAILER[(mergeddata$TRAILER==''|mergeddata$TRAILER==' ')]<-'0'
+
+#Convert datatype
+mergeddata$TOTAL<- as.integer(mergeddata$TOTAL)
+mergeddata$TRAILER<- as.integer(mergeddata$TRAILER)
+mergeddata$Year<- as.factor(mergeddata$Year)
+
+
+
+df=subset(mergeddata,select = c(1:11))
+df = mergeddata
+#total,trailer,truck,bus,ped,lod
+############BUS PLOT BY YEARS################
+l1=df %>% group_by(Year) %>% summarise(tot=sum(BUS))
+bus_plot<-ggplot(data=df,aes(x=Year, y=BUS))+geom_bar(stat="identity")
+bus_plot
+###########TRUCK PLOT BY YEARS##############
+l2=df %>% group_by(Year) %>% summarise(tot=sum(TRUCK))
+truck_plot<-ggplot(data=df,aes(x=Year, y=TRUCK))+geom_bar(stat="identity")
+truck_plot
+###########TRAILER PLOT BY YEARS############
+l3=df %>% group_by(Year) %>% summarise(tot=sum(TRAILER))
+tra_plot<-ggplot(data=df,aes(x=Year, y=TRAILER))+geom_bar(stat="identity")
+tra_plot
+###########PED.BYC PLOT BY YEARS############
+l4=df %>% group_by(Year) %>% summarise(tot=sum(PED.BYC))
+ped_plot<-ggplot(data=df,aes(x=Year, y=PED.BYC))+geom_bar(stat="identity")
+ped_plot
+###########LOD PLOT BY YEARS############
+l5=df %>% group_by(Year) %>% summarise(tot=sum(LOD))
+lod_plot<-ggplot(data=df,aes(x=Year, y=LOD))+geom_bar(stat="identity")
+lod_plot
+```
+
+Event Feature Distributions
+```{r}
+##Look at each column type
+summary(mergeddata)
+mergeddata$TOTAL <- as.integer(mergeddata$TOTAL)
+
+##Turn name to factor
+mergeddata$Holiday.Name <- as.factor(mergeddata$Holiday.Name)
+
+##Count of each holiday
+table(mergeddata$Holiday.Name)
+
+
+#Create new df and drop na
+data <- mergeddata                          
+data[data == ""] <- NA  
+data <- data %>%
+  drop_na(Holiday.Name)
+  
+
+##plot of holidays and totol amount of travelers
+ggplot(data, aes(x=Holiday.Name, y=TOTAL)) + 
+  geom_bar(stat="identity")  + 
+   coord_flip()
+
+##SAME THING AS BAR GRAPH ABOVE , BUT IN NUMBERS
+data %>% 
+  mutate(TOTAL = ifelse(is.na(TOTAL),0,TOTAL)) %>% 
+  group_by(Holiday.Name) %>% 
+  summarise(av = sum(TOTAL))
+
+
+##Create new dataframe turn spaces into NA
+data1 <- mergeddata                          
+data1[data1 == ""] <- NA  
+#data1 
+
+#drop nas in holiday.observed
+data1 <- data1 %>%
+  drop_na(Holiday.Observed)
+
+##Plot total travelers in holiday.observed 
+ggplot(data1, aes(x=Holiday.Observed, y=TOTAL)) + 
+  geom_bar(stat="identity")  + 
+   coord_flip()
+
+
+##Holiday travelers by hour
+data1 %>% 
+  group_by(DAILY, Holiday.Observed) %>% 
+  summarise(tot = sum(TOTAL))
+
+##By date
+mergeddata %>% 
+  group_by(Date, Holiday.Observed) %>% 
+  summarise(tot = sum(TOTAL))
+
+
+##Turn holiday.name and holiday.observed into 1 if its a holiday and 0 if not
+data3 <- mergeddata                          
+data3[data3 == ""] <- NA  
+
+data3 <- data3 %>% 
+  mutate(Holiday.Name = ifelse(is.na(Holiday.Name),0,1)) %>% 
+  mutate(Holiday.Observed = ifelse(is.na(Holiday.Observed),0,1))
+```
+
+Weather Feature Distributions
+```{r}
+#temp,precip,snow,windspeed
+##Snow has NA values but it is across winter 
+#Precipitation 
+ggplot(mergeddata, aes(x = precip)) + theme(
+  axis.text.x = element_text(angle = 45)) +
+  geom_bar(stat="bin")
+
+#Windspeed
+ggplot(mergeddata, aes(x = windspeed)) + theme(
+  axis.text.x = element_text(angle = 45)) +
+  geom_bar(stat="bin")
+###Top 2 highest windspeed in Jan/12/2020, Dec/25/2017 
+
+
+
+#Change NA value dates that snowed into 1 and other 0. Then turn dates with snow in to 1 
+#and others into 0 
+mergeddata$snow = case_when(mergeddata$Date == 	
+"2014-01-15" ~ 1, mergeddata$Date == "2014-02-01" ~ 1, mergeddata$Date == "2014-02-01" ~   1, mergeddata$Date == "2014-02-04" ~ 1, 
+mergeddata$Date == "2014-02-05" ~ 1, mergeddata$Date == "2014-02-09" ~ 1, 
+mergeddata$Date == "2014-02-18" ~ 1, mergeddata$Date == "2014-03-02" ~ 1, 
+mergeddata$Date == "2014-03-12" ~ 1, mergeddata$Date == "2014-03-20" ~ 1, 
+mergeddata$Date == "2014-03-30" ~ 1, mergeddata$Date == "2014-04-15" ~ 1,
+mergeddata$Date == "2015-02-16" ~ 1, mergeddata$Date == "2015-02-17" ~ 1,
+mergeddata$Date == "2015-02-18" ~ 1, mergeddata$Date == "2015-02-21" ~ 1,
+mergeddata$Date == "2015-02-24" ~ 1, mergeddata$Date == "2015-03-01" ~ 1,
+mergeddata$Date == "2016-01-22" ~ 1, mergeddata$Date == "2014-01-23" ~ 1,
+mergeddata$Date == "2016-02-15" ~ 1, mergeddata$snow >0 ~ 1, mergeddata$snow == 0 ~ 0)
+
+mergeddata$snow[is.na(mergeddata$snow)]=0
+
+extradata$snow = case_when(extradata$Full_Date == 	
+"2014-01-15" ~ 1, extradata$Full_Date == "2014-02-01" ~ 1, extradata$Full_Date == "2014-02-01" ~   1, extradata$Full_Date == "2014-02-04" ~ 1, 
+extradata$Full_Date == "2014-02-05" ~ 1, extradata$Full_Date == "2014-02-09" ~ 1, 
+extradata$Full_Date == "2014-02-18" ~ 1, extradata$Full_Date == "2014-03-02" ~ 1, 
+extradata$Full_Date == "2014-03-12" ~ 1, extradata$Full_Date == "2014-03-20" ~ 1, 
+extradata$Full_Date == "2014-03-30" ~ 1, extradata$Full_Date == "2014-04-15" ~ 1,
+extradata$Full_Date == "2015-02-16" ~ 1, extradata$Full_Date == "2015-02-17" ~ 1,
+extradata$Full_Date == "2015-02-18" ~ 1, extradata$Full_Date == "2015-02-21" ~ 1,
+extradata$Full_Date == "2015-02-24" ~ 1, extradata$Full_Date == "2015-03-01" ~ 1,
+extradata$Full_Date == "2016-01-22" ~ 1, extradata$Full_Date == "2014-01-23" ~ 1,
+extradata$Full_Date == "2016-02-15" ~ 1, extradata$snow >0 ~ 1, extradata$snow == 0 ~ 0)
+
+extradata$snow[is.na(extradata$snow)]=0
+
+#Snow Days Group By Month
+snowing= extradata %>% group_by(Month)  %>%
+                    summarise(snow_days = sum(snow),
+                              .groups = 'drop')
+snowing$snow_days <- as.numeric(snowing$snow_days)
+snowing$Month <- as.factor(snowing$Month)
+#Plot Snow Days Group By Month 
+snow_month <- ggplot(data=snowing, aes(x = Month, y = snow_days)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total Snowday by Month') +
+  xlab('Month') + ylab('Count') +
+  theme_minimal()
+snow_month
+
+#Monthly Avg Windspeed
+windy= mergeddata %>% group_by(Month)  %>%
+                    summarise(avg_wind = mean(windspeed),
+                              .groups = 'drop')
+windy$avg_wind <- as.numeric(windy$avg_wind)
+windy$Month <- as.factor(windy$Month)
+wind_month <- ggplot(data=windy, aes(x = Month, y = avg_wind)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Month') +
+  xlab('Month') + ylab('Average Wind Speed') +
+  theme_minimal()
+wind_month
+
+#Monthly Average Temp
+temp = mergeddata %>% group_by(Month)  %>%
+                    summarise(avg_temp = mean(temp),
+                              .groups = 'drop')
+temp$avg_temp <- as.numeric(temp$avg_temp)
+temp$Month <- as.factor(temp$Month)
+temp_Month <- ggplot(data=temp, aes(x = Month, y = avg_temp)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Month') +
+  xlab('Month') + ylab('Average Temp') +
+  theme_minimal()
+temp_Month
+
+
+######################################################
+#Frequency of Snow
+summary(as.factor(mergeddata$snow))
+######################################################
+```
+
+Check
+```{r}
+#date,month,day,year,weeknumber,dayofweek,day.1,count
+date_feature <- mergeddata[, c(2, 8:15)]
+
+# checking missing values
+na.count <- function(v){sum(is.na(v))}
+apply(date_feature, 2, na.count)
+date_feature <- na.omit(date_feature)
+apply(date_feature, 2, na.count)
+
+# group by weekday
+weekday_group <- date_feature %>%
+  group_by(Day.1)
+
+weekday <- weekday_group %>% summarise(
+  total_count = sum(TOTAL)
+)
+
+weekday_plot <- ggplot(data=weekday, aes(x = Day.1, y = total_count)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Weekdays') +
+  xlab('Weekdays') + ylab('Count') +
+  theme_minimal()
+weekday_plot
+
+# group by year
+year_group <- date_feature %>%
+  group_by(Year)
+
+year <- year_group %>% summarise(
+  total_count = sum(TOTAL)
+)
+
+year_plot <- ggplot(data = year, aes(x = Year, y = total_count)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Years') +
+  xlab('Years') + ylab('Count') +
+  theme_minimal()
+year_plot
+
+# group by month
+month_group <- date_feature %>%
+  group_by(Month)
+
+month <- month_group %>% summarise(
+  total_count = sum(TOTAL)
+)
+
+month_plot <- ggplot(data=month, aes(x = Month, y = total_count)) + 
+  geom_bar(stat = "identity") +
+  ggtitle('Total counts by Month') +
+  xlab('Month') + ylab('Count') +
+  theme_minimal()
+month_plot
+
+
+#Convert Date to Datetime
+mergeddata$Date = as.POSIXct(mergeddata$Date,format="%Y-%m-%d")
+#####################################################
+
+#Day - Many more 1st day of the months
+mergeddata$Day <- as.character(mergeddata$Day)
+ggplot(mergeddata, aes(Day)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Month - Most dates in March
+mergeddata$Month <- as.character(mergeddata$Month)
+ggplot(mergeddata, aes(Month)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Year - Extra 10000 data points for 2021
+mergeddata$Year <- as.character(mergeddata$Year)
+ggplot(mergeddata, aes(Year)) +
+  geom_bar(fill = "#0073C2FF")
+
+#Day of Week
+mergeddata$Day.1 <- as.character(mergeddata$Day.1)
+ggplot(mergeddata, aes(Day.1)) +
+  geom_bar(fill = "#0073C2FF")
+```
+
+Time Feature Distributions- Eileanor
+```{r}
+str(mergeddata)
+unique(mergeddata$DAILY)
+
+#Take out white spaces
+mergeddata$DAILY = gsub(" ", "", mergeddata$DAILY, fixed = TRUE)
+
+#1766 rows without any times
+summary(as.factor(mergeddata$DAILY))
+
+#add 0s where necessary (00:00:00 = 0:00:00, 00:30:00 = 0:30:00)
+mergeddata[mergeddata$DAILY == '0:00:00',]$DAILY = paste0("0", mergeddata[mergeddata$DAILY == '0:00:00',]$DAILY)
+mergeddata[mergeddata$DAILY == '0:30:00',]$DAILY = paste0("0", mergeddata[mergeddata$DAILY == '0:30:00',]$DAILY)
+
+#Change to Timestamp
+mergeddata$DAILY = strptime(mergeddata$DAILY, format = "%H:%M:%OS", tz = "EST")
+mergeddata$DAILY = as_hms(mergeddata$DAILY)
+
+#Aggregate by Hour
+mergeddata$TOTAL = as.numeric(mergeddata$TOTAL)
+mergeddata$TRAILER = as.numeric(mergeddata$TRAILER)
+
+#Create new column for each hour number
+mergeddata$Hour <- hour(mergeddata$DAILY)
+
+#Aggregate Data by Hour
+mergeddata <- mergeddata %>% 
+  group_by(Hour,Date) %>% 
+  summarise(TOTAL = sum(TOTAL),
+            TRAILER = sum(TRAILER),
+            BUS = sum(BUS),
+            TRUCK = sum(TRUCK),
+            PED.BYC = sum(PED.BYC),
+            LOD = sum(LOD),
+            Month = first(Month),
+            Day = first(Day),
+            Year = first(Year),
+            Week.Number = first(Week.Number),
+            Day.of.Week = first(Day.of.Week),
+            Day.1 = first(Day.1),
+            Count = first(Count),
+            Holiday.Name = first(Holiday.Name),
+            temp = first(temp),
+            precip = first(precip),
+            snow = first(snow),
+            windspeed = first(windspeed),
+            Holiday.Observed = first(Holiday.Observed))
+
+#Crete AM/PM Rush Feature
+mergeddata <- mergeddata %>%
+  mutate(Rush = ifelse((Hour >= 5 & Hour <=8)|(Hour >= 15 & Hour <= 20), 1, 0))
+
+```
+
+
+Next steps: Look at NAs, make sure all variables are encoded correctly

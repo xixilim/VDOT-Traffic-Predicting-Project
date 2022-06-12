@@ -1,0 +1,256 @@
+---
+title: "XGBoost"
+author: "VDOT team 2"
+date: "2022/5/5"
+output: html_document
+---
+```{r}
+rm(list = ls())
+library(dplyr)
+library(tidyr)
+library(xgboost)
+library(caret)
+
+#set path to code folder
+```
+
+##### Loading Dataset #####
+```{r pressure, echo=FALSE}
+#Read in Data
+data <- read.csv("../Data/HistoricalData.csv", header = TRUE, stringsAsFactors = TRUE)
+
+#Aggregate Data by Hour
+data <- data %>% 
+  group_by(Date) %>% 
+  summarise(Hour = NULL,
+            TOTAL = sum(TOTAL),
+            TRAILER = sum(TRAILER),
+            BUS = sum(BUS),
+            TRUCK = sum(TRUCK),
+            PED.BYC = sum(PED.BYC),
+            LOD = sum(LOD),
+            Month = first(Month),
+            Day = first(Day),
+            Year = first(Year),
+            Week.Number = first(Week.Number),
+            Day.of.Week = first(Day.of.Week),
+            WeekDay = first(WeekDay),
+            CountWeekDay = first(CountWeekDay),
+            Holiday = first(Holiday),
+            temp = first(temp),
+            precip = first(precip),
+            snow = first(snow),
+            windspeed = first(windspeed),
+            SchoolEvent = first(SchoolEvent),
+            Rush = first(Rush),
+            covid = first(covid))
+
+data <- subset(data, select=-c(Date,TRAILER,BUS,TRUCK,PED.BYC,LOD,Rush,CountWeekDay,SchoolEvent)) #Remove non-predictor columns
+
+#Convert Datatype
+data$Month <- as.character(data$Month)
+data$Day <- as.character(data$Day)
+data$Week.Number <- as.character(data$Week.Number)
+data$Day.of.Week <- as.character(data$Day.of.Week)
+data$Holiday <- as.character(data$Holiday)
+data$covid <- as.factor(data$covid)
+```
+
+
+Turn into categorical variable
+```{r}
+#hist(data$TOTAL, breaks=20)
+#>3000
+
+data$TOTAL <- ifelse(data$TOTAL >=3000, 1, 0)
+data$TOTAL <- as.character(data$TOTAL)
+```
+
+#Train/Test
+```{r}
+#Randomly Sample Data (80/20)
+trainIndex = sample(1:nrow(data), size = nrow(data)*0.8)
+
+#Define Train Set
+train.x <- data[trainIndex, -1] #Create train set, remove target variable
+train.y <- data$TOTAL[trainIndex]
+train.x = data.matrix(train.x) #Convert from DF to matrix
+xgb_train = xgb.DMatrix(data = train.x, label = train.y)
+
+#Define Test Set
+test.x <- data[-trainIndex, -1] #Create test set, remove target variable
+test.y <- data$TOTAL[-trainIndex]
+test.x = data.matrix(test.x)  #Convert from DF to matrix
+xgb_test = xgb.DMatrix(data = test.x, label = test.y)
+
+```
+
+### XGBoost Model ###
+```{r}
+set.seed(4)
+
+#Imbalanced Classes
+negative_cases <- sum(data$TOTAL == '0')
+postive_cases <- sum(data$TOTAL == '1')
+weight = negative_cases/postive_cases
+
+#Cross Validation
+model <- xgb.cv(objectve  = "binary:logistic",
+              scale_pos_weight = 100, # control for imbalanced classes
+              booster = "dart",
+              eval_metric = "logloss",
+              max_depth = 6,
+              data = xgb_train,
+              nrounds = 100,
+              watchlist = list(train=xgb_train, test=xgb_test),
+              maximize = FALSE,
+              nfold = 3,
+              early_stopping_rounds = 10,
+              print_every_n = 1,
+              verbose = 0)
+bestRound <- which.min(model$evaluation_log$test_logloss_mean)
+
+#Train
+model <- xgb.train(eval_metric = "logloss",
+                   max_depth = 6,
+                   data = xgb_train, 
+                   nrounds = bestRound, 
+                   watchlist= list(train=xgb_train, test=xgb_test),
+                   verbose = 0)
+logloss <- min(model$evaluation_log$test_logloss)
+
+save(model, file = "../Results/DayModel.rda") #Save model
+```
+
+### Importance Table and Plot
+```{r}
+importance_matrix <- xgb.importance(model = model)
+print(importance_matrix)
+xgb.plot.importance(importance_matrix = importance_matrix)
+
+#Original Plot showed 0 for School Event and snow so took those out
+#Rush hour is already included in Hour so can take that out too
+
+#Temperature and Week Number correlated with Month
+#Day of Week and Week Day are the same thing
+```
+
+
+```{r}
+  ################################# Create Predictive Data #################################
+  
+  #Parameters
+  days = 14
+  #days = input$days #how many days ahead to predict (starting today)
+  apiKey = 'N3MWRWQ2C9R4B3M2FUNB38Q2R' #Weather Data API key from https://www.visualcrossing.com/weather/weather-data-services
+  
+  #Date Range
+  start_date = Sys.Date()
+  end_date = Sys.Date()+days
+  
+  #Create Date Lookup Table
+  df <- data.frame(Full_Date = character(length=days),
+                   Month = character(length=days),
+                   Day = character(length=days),
+                   Year = character(length=days),
+                   'Week Number' = character(length=days),
+                   'Day of Week' = character(length=days),
+                   Day.1 = character(length=days))
+  df$Full_Date <- seq(from = start_date, by = 'day', length.out = days)
+  df$Month <- month(df$Full_Date)
+  df$Day <- day(df$Full_Date)
+  df$Year <- year(df$Full_Date)
+  df$Week.Number <- week(df$Full_Date)
+  df$Day.of.Week <- wday(df$Full_Date)
+  df$Day.1 <- wday(df$Full_Date, label=TRUE)
+  
+  #Holidays
+  holiday <- read.csv("../Data/Holidays.csv")
+  holiday$Date <- as.POSIXct(holiday$Date, format = "%m/%d/%Y")
+  
+  #Take Holidays within next x days
+  holiday <- holiday[holiday$Date >= as.Date(start_date) & holiday$Date <= as.Date(end_date),]
+  
+  #Merge
+  if (nrow(holiday) == 0){
+    df$Holiday = rep(NA,nrow(df))
+    data <- df
+  } else {
+    data <- left_join(df, holiday, by = c("Full_Date" = "Date"))
+  }
+  
+  data$Holiday[is.na(data$Holiday)] <- 'No Holiday' #fill NA with "No Holiday"
+  
+  #Weather
+  weather = read.csv(url(paste('https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/Jamestown/',as.Date(start_date),'/',as.Date(end_date),'?unitGroup=us&include=days&key=',apiKey,'&contentType=csv', sep="")))
+  weather = subset(weather, select = c(datetime,temp,precip,snow,windspeed))
+  weather$datetime <- as.POSIXct(weather$datetime, format = "%Y-%m-%d") #change to datetime
+  
+  #Merge
+  data <- left_join(data, weather, by = c("Full_Date" = "datetime"))
+  data$snow[is.na(data$snow)] <- 0 #fill NA for snow with 0
+  
+  #Create Covid Column
+  data$covid = rep(0,days)
+  
+  #Create Hour Column
+  ts <- seq.POSIXt(as.POSIXct(start_date,"%Y-%m-%d"), as.POSIXct(end_date,"%Y-%m-%d"), by="hour")
+  newdata <- data.frame(datetime = character(length=length(ts)),
+                        Date = character(length=length(ts)),
+                        Hour = character(length=length(ts)))
+  newdata$datetime <- ts
+  newdata$Date <- format(as.POSIXct(newdata$datetime), format = "%Y-%m-%d")
+  newdata$Date <- as.POSIXct(newdata$Date, format = "%Y-%m-%d")
+  newdata$Hour <- format(as.POSIXct(newdata$datetime), format = "%H") #Time to Hour
+  
+  newdata <- subset(newdata, select=-c(datetime))
+  
+  #Merge
+  newdata <- left_join(newdata, data, by = c("Date" = "Full_Date"))
+  
+  #Remove Rows with NAs
+  newdata = na.omit(newdata)
+  
+  #Change Column names
+  newdata <- newdata %>%
+    rename(
+      WeekDay = Day.1)
+```
+
+
+### Predict by Hour on New Dates ### 
+```{r}
+#Aggregate Data by Hour
+newdata <- newdata %>% 
+  group_by(Date) %>% 
+  summarise(Month = first(Month),
+            Day = first(Day),
+            Year = first(Year),
+            Week.Number = first(Week.Number),
+            Day.of.Week = first(Day.of.Week),
+            WeekDay = first(WeekDay),
+            Holiday = first(Holiday),
+            temp = first(temp),
+            precip = first(precip),
+            snow = first(snow),
+            windspeed = first(windspeed),
+            covid = first(covid))
+
+predictions <- subset(newdata, select=c(Date))
+newdata <- subset(newdata, select=-c(Date))
+newdata <- data.matrix(newdata, rownames.force = NA)
+
+predictions["TOTAL_Day_Predict"] <- predict(model, newdata = newdata)
+
+#Turn into class
+#predictions$TOTAL_Day_Predict <- ifelse(predictions$TOTAL_Day_Predict < 0.5, 'Normal','Higher than Normal')
+
+
+
+```
+
+Export Predictions as csv
+```{r}
+write.csv(predictions, "../Results/DailyPredictions.csv", row.names = FALSE)
+```
+
